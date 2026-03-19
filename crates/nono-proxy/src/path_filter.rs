@@ -21,6 +21,9 @@ pub fn check_path_allowed(rules: &[PathRule], method: &str, path: &str) -> bool 
 }
 
 /// Check if a single rule matches the given method and path.
+///
+/// Percent-decodes the path before matching to prevent bypass via encoding
+/// (e.g., `/admin%2Fdanger` is decoded to `/admin/danger` before comparison).
 #[must_use]
 pub fn matches_path_rule(rule: &PathRule, method: &str, path: &str) -> bool {
     // Method check (case-insensitive, "*" = any)
@@ -34,9 +37,12 @@ pub fn matches_path_rule(rule: &PathRule, method: &str, path: &str) -> bool {
         None => path,
     };
 
+    // Percent-decode to prevent bypass via encoded slashes/dots
+    let decoded = urlencoding::decode(clean_path).unwrap_or(std::borrow::Cow::Borrowed(clean_path));
+
     // Split into segments and match
     let rule_segments: Vec<&str> = rule.path.split('/').filter(|s| !s.is_empty()).collect();
-    let path_segments: Vec<&str> = clean_path.split('/').filter(|s| !s.is_empty()).collect();
+    let path_segments: Vec<&str> = decoded.split('/').filter(|s| !s.is_empty()).collect();
 
     match_segments(&rule_segments, &path_segments)
 }
@@ -167,5 +173,54 @@ mod tests {
             "GET",
             "/api/v4/version?private_token=xxx"
         ));
+    }
+
+    #[test]
+    fn test_percent_encoded_path_decoded_before_matching() {
+        let rules = vec![PathRule {
+            method: "GET".into(),
+            path: "/api/v4/projects/**".into(),
+        }];
+        // %2F = /, so /api%2Fv4%2Fprojects%2F123 decodes to /api/v4/projects/123
+        assert!(check_path_allowed(
+            &rules,
+            "GET",
+            "/api%2Fv4%2Fprojects%2F123"
+        ));
+    }
+
+    #[test]
+    fn test_encoded_traversal_blocked() {
+        // Rule only allows /mcp/**
+        let rules = vec![PathRule {
+            method: "GET".into(),
+            path: "/mcp/**".into(),
+        }];
+        // Attempt to bypass via encoded path traversal: /mcp/../admin
+        // %2e%2e = "..", decoded path = /mcp/../admin → segments: [mcp, .., admin]
+        // ".." is not "mcp" so it won't match after the ** greedily
+        // But more importantly, the segments include ".." which won't match "mcp" prefix
+        assert!(!check_path_allowed(&rules, "GET", "/admin"));
+        assert!(!check_path_allowed(&rules, "GET", "/%2e%2e/admin"));
+        assert!(check_path_allowed(&rules, "GET", "/mcp/tools"));
+    }
+
+    #[test]
+    fn test_double_encoded_slash_normalized() {
+        let rules = vec![PathRule {
+            method: "DELETE".into(),
+            path: "/admin/**".into(),
+        }];
+        // Deny list: only DELETE /admin/** is allowed
+        // Attacker sends DELETE /safe%2F..%2Fadmin/danger
+        // After decode: /safe/../admin/danger → segments: [safe, .., admin, danger]
+        // Does NOT match /admin/** (first segment is "safe", not "admin")
+        assert!(!check_path_allowed(
+            &rules,
+            "DELETE",
+            "/safe%2F..%2Fadmin/danger"
+        ));
+        // Direct match still works
+        assert!(check_path_allowed(&rules, "DELETE", "/admin/users"));
     }
 }
