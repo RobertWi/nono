@@ -228,6 +228,7 @@ pub fn resolve_credentials(
                 path_replacement: cred.path_replacement.clone(),
                 query_param_name: cred.query_param_name.clone(),
                 env_var: cred.env_var.clone(),
+                allowed_paths: cred.allowed_paths.clone(),
             });
         } else if let Some(cred) = policy.credentials.get(name) {
             // Validate env_var against dangerous variable blocklist
@@ -253,6 +254,7 @@ pub fn resolve_credentials(
                 path_replacement: None,
                 query_param_name: None,
                 env_var: cred.env_var.clone(),
+                allowed_paths: Vec::new(),
             });
         }
         // We already validated existence above, so this else branch won't be hit
@@ -431,6 +433,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -465,6 +468,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -495,6 +499,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -535,6 +540,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -611,6 +617,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -638,6 +645,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -665,6 +673,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -697,6 +706,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: Some("OPENAI_API_KEY".to_string()),
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -803,6 +813,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: Some("LD_PRELOAD".to_string()),
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -826,6 +837,101 @@ mod tests {
             resolved.profile_credentials.contains(&"github".to_string()),
             "developer profile should include github credential, got: {:?}",
             resolved.profile_credentials
+        );
+    }
+
+    // ============================================================================
+    // L7 allowed_paths tests
+    // ============================================================================
+
+    #[test]
+    fn test_resolve_credentials_propagates_allowed_paths() {
+        use crate::profile::CustomCredentialDef;
+        use nono_proxy::config::PathRule;
+
+        let json = embedded_network_policy_json();
+        let policy = load_network_policy(json).unwrap();
+
+        let mut custom = HashMap::new();
+        custom.insert(
+            "gitlab".to_string(),
+            CustomCredentialDef {
+                upstream: "https://gitlab.example.com".to_string(),
+                credential_key: "gitlab_token".to_string(),
+                inject_mode: InjectMode::Header,
+                inject_header: "PRIVATE-TOKEN".to_string(),
+                credential_format: "{}".to_string(),
+                path_pattern: None,
+                path_replacement: None,
+                query_param_name: None,
+                env_var: None,
+                allowed_paths: vec![
+                    PathRule {
+                        method: "GET".to_string(),
+                        path: "/api/v4/projects/*/merge_requests/**".to_string(),
+                    },
+                    PathRule {
+                        method: "POST".to_string(),
+                        path: "/api/v4/projects/*/merge_requests/*/notes".to_string(),
+                    },
+                ],
+            },
+        );
+
+        let routes = resolve_credentials(&policy, &["gitlab".to_string()], &custom).unwrap();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].allowed_paths.len(), 2);
+        assert_eq!(routes[0].allowed_paths[0].method, "GET");
+        assert_eq!(
+            routes[0].allowed_paths[0].path,
+            "/api/v4/projects/*/merge_requests/**"
+        );
+        assert_eq!(routes[0].allowed_paths[1].method, "POST");
+    }
+
+    #[test]
+    fn test_resolve_builtin_credentials_have_empty_allowed_paths() {
+        let json = embedded_network_policy_json();
+        let policy = load_network_policy(json).unwrap();
+
+        let routes =
+            resolve_credentials(&policy, &["openai".to_string()], &HashMap::new()).unwrap();
+        assert_eq!(routes.len(), 1);
+        assert!(
+            routes[0].allowed_paths.is_empty(),
+            "Built-in credentials should have empty allowed_paths (allow all)"
+        );
+    }
+
+    #[test]
+    fn test_resolve_custom_credential_without_allowed_paths_defaults_empty() {
+        use crate::profile::CustomCredentialDef;
+
+        let json = embedded_network_policy_json();
+        let policy = load_network_policy(json).unwrap();
+
+        let mut custom = HashMap::new();
+        custom.insert(
+            "myapi".to_string(),
+            CustomCredentialDef {
+                upstream: "https://api.example.com".to_string(),
+                credential_key: "my_key".to_string(),
+                inject_mode: InjectMode::Header,
+                inject_header: "Authorization".to_string(),
+                credential_format: "Bearer {}".to_string(),
+                path_pattern: None,
+                path_replacement: None,
+                query_param_name: None,
+                env_var: None,
+                allowed_paths: Vec::new(),
+            },
+        );
+
+        let routes = resolve_credentials(&policy, &["myapi".to_string()], &custom).unwrap();
+        assert_eq!(routes.len(), 1);
+        assert!(
+            routes[0].allowed_paths.is_empty(),
+            "Custom credential without allowed_paths should have empty vec"
         );
     }
 }
