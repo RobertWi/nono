@@ -228,6 +228,7 @@ pub fn resolve_credentials(
                 path_replacement: cred.path_replacement.clone(),
                 query_param_name: cred.query_param_name.clone(),
                 env_var: cred.env_var.clone(),
+                oauth2: None,
             });
         } else if let Some(cred) = policy.credentials.get(name) {
             // Validate env_var against dangerous variable blocklist
@@ -253,6 +254,7 @@ pub fn resolve_credentials(
                 path_replacement: None,
                 query_param_name: None,
                 env_var: cred.env_var.clone(),
+                oauth2: None,
             });
         }
         // We already validated existence above, so this else branch won't be hit
