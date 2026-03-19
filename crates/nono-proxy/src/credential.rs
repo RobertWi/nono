@@ -228,6 +228,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         }];
         let store = CredentialStore::load(&routes);
         assert!(store.is_ok());
