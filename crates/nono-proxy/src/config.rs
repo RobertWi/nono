@@ -68,6 +68,20 @@ fn default_bind_addr() -> IpAddr {
     IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
 }
 
+/// A single path-level access rule for L7 filtering.
+///
+/// When `allowed_paths` is non-empty on a route, only requests matching
+/// at least one rule are forwarded. Empty = all paths allowed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PathRule {
+    /// HTTP method (GET, POST, PUT, DELETE, PATCH, etc.)
+    /// Use "*" to match any method.
+    pub method: String,
+    /// URL path glob pattern.
+    /// `*` matches a single path segment, `**` matches zero or more segments.
+    pub path: String,
+}
+
 /// Configuration for a reverse proxy credential route.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteConfig {
@@ -124,6 +138,11 @@ pub struct RouteConfig {
     /// otherwise produce a nonsensical env var name.
     #[serde(default)]
     pub env_var: Option<String>,
+
+    /// L7 path filter rules. When non-empty, only matching method+path
+    /// combinations are forwarded. Empty = all paths allowed (default).
+    #[serde(default)]
+    pub allowed_paths: Vec<PathRule>,
 }
 
 fn default_inject_header() -> String {
@@ -215,5 +234,34 @@ mod tests {
         let json = r#"{"address": "proxy:3128", "auth": null}"#;
         let ext: ExternalProxyConfig = serde_json::from_str(json).unwrap();
         assert!(ext.bypass_hosts.is_empty());
+    }
+
+    #[test]
+    fn test_path_rule_deserialization() {
+        let json = r#"{"method": "GET", "path": "/api/v4/projects/*/merge_requests/**"}"#;
+        let rule: PathRule = serde_json::from_str(json).unwrap();
+        assert_eq!(rule.method, "GET");
+        assert_eq!(rule.path, "/api/v4/projects/*/merge_requests/**");
+    }
+
+    #[test]
+    fn test_route_config_with_allowed_paths() {
+        let json = r#"{
+            "prefix": "/gitlab",
+            "upstream": "https://gitlab.example.com",
+            "allowed_paths": [
+                {"method": "GET", "path": "/api/v4/projects/*/merge_requests/**"},
+                {"method": "POST", "path": "/api/v4/projects/*/merge_requests/*/notes"}
+            ]
+        }"#;
+        let route: RouteConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(route.allowed_paths.len(), 2);
+    }
+
+    #[test]
+    fn test_route_config_without_paths_allows_all() {
+        let json = r#"{"prefix": "/openai", "upstream": "https://api.openai.com"}"#;
+        let route: RouteConfig = serde_json::from_str(json).unwrap();
+        assert!(route.allowed_paths.is_empty());
     }
 }

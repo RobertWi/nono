@@ -464,6 +464,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             }],
             ..Default::default()
         };
@@ -502,6 +503,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None, // No explicit env_var — should fall back to uppercase
+                allowed_paths: Vec::new(),
             }],
             ..Default::default()
         };
@@ -549,6 +551,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: Some("OPENAI_API_KEY".to_string()),
+                allowed_paths: Vec::new(),
             }],
             ..Default::default()
         };
@@ -602,6 +605,7 @@ mod tests {
                     path_replacement: None,
                     query_param_name: None,
                     env_var: None,
+                    allowed_paths: Vec::new(),
                 },
                 crate::config::RouteConfig {
                     prefix: "github".to_string(),
@@ -614,6 +618,7 @@ mod tests {
                     path_replacement: None,
                     query_param_name: None,
                     env_var: Some("GITHUB_TOKEN".to_string()),
+                    allowed_paths: Vec::new(),
                 },
             ],
             ..Default::default()
