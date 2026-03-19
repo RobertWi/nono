@@ -7,6 +7,7 @@
 //!
 //! Credential references are dispatched by URI scheme:
 //! - `env://VAR_NAME` — reads from the current process environment
+//! - `file:///path/to/secret` — reads from a local file (before sandbox activation)
 //! - `op://vault/item/field` — loaded via the 1Password CLI
 //! - `apple-password://server/account` — loaded via macOS `security`
 //! - Everything else — loaded from the system keyring
@@ -545,7 +546,7 @@ fn load_from_file(uri: &str) -> Result<Zeroizing<String>> {
         )));
     }
 
-    tracing::debug!("Loaded secret from file '{}'", path_str);
+    tracing::debug!("Loaded secret from {}", redact_file_uri(uri));
     Ok(Zeroizing::new(trimmed))
 }
 
@@ -803,6 +804,18 @@ pub fn redact_apple_password_uri(uri: &str) -> String {
         }
     }
     "apple-password://***".to_string()
+}
+
+/// Redact a file:// URI for safe logging.
+/// Keeps the directory structure but replaces the filename.
+/// `file:///vault/secrets/gitlab` → `file:///vault/secrets/[REDACTED]`
+fn redact_file_uri(uri: &str) -> String {
+    if let Some(path) = uri.strip_prefix(FILE_URI_PREFIX) {
+        if let Some(last_slash) = path.rfind('/') {
+            return format!("{}{}[REDACTED]", FILE_URI_PREFIX, &path[..=last_slash]);
+        }
+    }
+    format!("{}[REDACTED]", FILE_URI_PREFIX)
 }
 
 /// Wait for a child process with a timeout.
@@ -1082,6 +1095,7 @@ pub fn build_secret_mappings(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -1500,6 +1514,25 @@ mod tests {
             redact_apple_password_uri("apple-password://only-server"),
             "apple-password://***"
         );
+    }
+
+    // --- redact_file_uri tests ---
+
+    #[test]
+    fn test_redact_file_uri() {
+        assert_eq!(
+            redact_file_uri("file:///vault/secrets/gitlab"),
+            "file:///vault/secrets/[REDACTED]"
+        );
+        assert_eq!(
+            redact_file_uri("file:///etc/ssl/cert.pem"),
+            "file:///etc/ssl/[REDACTED]"
+        );
+    }
+
+    #[test]
+    fn test_redact_file_uri_root_path() {
+        assert_eq!(redact_file_uri("file:///secret"), "file:///[REDACTED]");
     }
 
     // --- classify_op_error tests ---
