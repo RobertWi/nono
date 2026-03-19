@@ -2368,6 +2368,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         }
     }
 
@@ -3982,6 +3983,30 @@ mod tests {
         assert!(
             validate_custom_credential("example", &cred).is_ok(),
             "file:// URI with env_var should be accepted"
+        );
+    }
+
+    #[test]
+    fn test_custom_credential_with_allowed_paths_deserializes() {
+        let json = r#"{
+            "network": {
+                "custom_credentials": {
+                    "gitlab": {
+                        "upstream": "https://gitlab.example.com",
+                        "credential_key": "gitlab_token",
+                        "inject_header": "PRIVATE-TOKEN",
+                        "credential_format": "{}",
+                        "allowed_paths": [
+                            {"method": "GET", "path": "/api/v4/projects/*/merge_requests/**"},
+                            {"method": "POST", "path": "/api/v4/projects/*/merge_requests/*/notes"}
+                        ]
+                    }
+                }
+            }
+        }"#;
+
+        let profile: Profile = serde_json::from_str(json).expect("test JSON should parse");
+        let gitlab = profile
             .network
             .custom_credentials
             .get("gitlab")
@@ -4218,7 +4243,10 @@ mod tests {
             .custom_credentials
             .get("vault_service")
             .expect("vault_service credential should exist");
-        assert_eq!(cred.credential_key, Some("file:///vault/secrets/token".to_string()));
+        assert_eq!(
+            cred.credential_key,
+            Some("file:///vault/secrets/token".to_string())
+        );
         assert_eq!(cred.env_var, Some("VAULT_API_KEY".to_string()));
     }
 }
