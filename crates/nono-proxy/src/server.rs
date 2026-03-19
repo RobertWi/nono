@@ -464,6 +464,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                oauth2: None,
             }],
             ..Default::default()
         };
@@ -502,6 +503,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None, // No explicit env_var — should fall back to uppercase
+                oauth2: None,
             }],
             ..Default::default()
         };
@@ -549,6 +551,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: Some("OPENAI_API_KEY".to_string()),
+                oauth2: None,
             }],
             ..Default::default()
         };
@@ -602,6 +605,7 @@ mod tests {
                     path_replacement: None,
                     query_param_name: None,
                     env_var: None,
+                    oauth2: None,
                 },
                 crate::config::RouteConfig {
                     prefix: "github".to_string(),
@@ -614,6 +618,7 @@ mod tests {
                     path_replacement: None,
                     query_param_name: None,
                     env_var: Some("GITHUB_TOKEN".to_string()),
+                    oauth2: None,
                 },
             ],
             ..Default::default()

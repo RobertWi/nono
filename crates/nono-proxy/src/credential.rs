@@ -228,6 +228,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            oauth2: None,
         }];
         let store = CredentialStore::load(&routes);
         assert!(store.is_ok());
