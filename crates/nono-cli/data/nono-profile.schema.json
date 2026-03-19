@@ -399,6 +399,28 @@
             { "type": "null" }
           ],
           "description": "Explicit environment variable name for the phantom token (e.g., \"OPENAI_API_KEY\"). Required when credential_key is a URI manager reference (op:// or apple-password://)."
+        },
+        "allowed_paths": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PathRule" },
+          "description": "L7 path filter rules. When non-empty, only matching method+path combinations are forwarded through this credential's route. Empty or absent = all paths allowed (default).",
+          "default": []
+        }
+      }
+    },
+    "PathRule": {
+      "type": "object",
+      "description": "A single path-level access rule for L7 filtering. Matches an HTTP method and URL path glob pattern.",
+      "additionalProperties": false,
+      "required": ["method", "path"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "HTTP method (GET, POST, PUT, DELETE, PATCH, etc.). Use \"*\" to match any method."
+        },
+        "path": {
+          "type": "string",
+          "description": "URL path glob pattern. \"*\" matches a single path segment, \"**\" matches zero or more segments."
         }
       }
     },

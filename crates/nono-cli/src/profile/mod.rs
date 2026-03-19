@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-// Re-export InjectMode from nono-proxy for use in profiles
-pub use nono_proxy::config::InjectMode;
+// Re-export InjectMode and PathRule from nono-proxy for use in profiles
+pub use nono_proxy::config::{InjectMode, PathRule};
 
 /// Profile metadata
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -137,6 +137,12 @@ pub struct CustomCredentialDef {
     /// `apple-password://`, or `file://`).
     #[serde(default)]
     pub env_var: Option<String>,
+
+    /// L7 path filter rules. When non-empty, only matching method+path
+    /// combinations are forwarded through this credential's route.
+    /// Empty = all paths allowed (default).
+    #[serde(default)]
+    pub allowed_paths: Vec<PathRule>,
 }
 
 fn default_inject_header() -> String {
@@ -1878,6 +1884,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         }
     }
 
@@ -2036,6 +2043,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         assert!(validate_custom_credential("telegram", &cred).is_ok());
     }
@@ -2052,6 +2060,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         let result = validate_custom_credential("telegram", &cred);
         let err = result.expect_err("missing path_pattern should be rejected");
@@ -2070,6 +2079,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         let result = validate_custom_credential("telegram", &cred);
         let err = result.expect_err("pattern without {} should be rejected");
@@ -2088,6 +2098,7 @@ mod tests {
             path_replacement: Some("/v2/bot{}/".to_string()),
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         assert!(validate_custom_credential("telegram", &cred).is_ok());
     }
@@ -2104,6 +2115,7 @@ mod tests {
             path_replacement: Some("/v2/bot/fixed/".to_string()), // No {} placeholder
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         let result = validate_custom_credential("telegram", &cred);
         let err = result.expect_err("replacement without {} should be rejected");
@@ -2122,6 +2134,7 @@ mod tests {
             path_replacement: None,
             query_param_name: Some("key".to_string()),
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         assert!(validate_custom_credential("google_maps", &cred).is_ok());
     }
@@ -2138,6 +2151,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None, // Missing required field
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         let result = validate_custom_credential("google_maps", &cred);
         let err = result.expect_err("missing query_param_name should be rejected");
@@ -2156,6 +2170,7 @@ mod tests {
             path_replacement: None,
             query_param_name: Some("".to_string()), // Empty
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         let result = validate_custom_credential("google_maps", &cred);
         let err = result.expect_err("empty query_param_name should be rejected");
@@ -2174,6 +2189,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         // BasicAuth mode doesn't require additional fields
         // Credential value is expected to be "username:password" format
@@ -2489,6 +2505,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -2505,6 +2522,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -2639,6 +2657,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -2655,6 +2674,7 @@ mod tests {
                 path_replacement: None,
                 query_param_name: None,
                 env_var: None,
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -3702,12 +3722,114 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: Some("EXAMPLE_API_KEY".to_string()),
+            allowed_paths: Vec::new(),
         };
         assert!(
             validate_custom_credential("example", &cred).is_ok(),
             "file:// URI with env_var should be accepted"
+            .network
+            .custom_credentials
+            .get("gitlab")
+            .expect("gitlab key");
+
+        assert_eq!(gitlab.allowed_paths.len(), 2);
+        assert_eq!(gitlab.allowed_paths[0].method, "GET");
+        assert_eq!(
+            gitlab.allowed_paths[0].path,
+            "/api/v4/projects/*/merge_requests/**"
+        );
+        assert_eq!(gitlab.allowed_paths[1].method, "POST");
+        assert_eq!(
+            gitlab.allowed_paths[1].path,
+            "/api/v4/projects/*/merge_requests/*/notes"
         );
     }
+
+    // ============================================================================
+    // L7 allowed_paths backward compatibility tests
+    // ============================================================================
+
+    #[test]
+    fn test_custom_credential_without_allowed_paths_backward_compat() {
+        let json = r#"{
+            "network": {
+                "custom_credentials": {
+                    "myapi": {
+                        "upstream": "https://api.example.com",
+                        "credential_key": "my_key",
+                        "inject_header": "Authorization",
+                        "credential_format": "Bearer {}"
+                    }
+                }
+            }
+        }"#;
+
+        let profile: Profile = serde_json::from_str(json).expect("test JSON should parse");
+        let myapi = profile
+            .network
+            .custom_credentials
+            .get("myapi")
+            .expect("myapi key");
+        assert!(
+            myapi.allowed_paths.is_empty(),
+            "Missing allowed_paths should default to empty vec (allow all)"
+        );
+    }
+
+    #[test]
+    fn test_custom_credential_with_empty_allowed_paths() {
+        let json = r#"{
+            "network": {
+                "custom_credentials": {
+                    "myapi": {
+                        "upstream": "https://api.example.com",
+                        "credential_key": "my_key",
+                        "allowed_paths": []
+                    }
+                }
+            }
+        }"#;
+
+        let profile: Profile = serde_json::from_str(json).expect("test JSON should parse");
+        let myapi = profile
+            .network
+            .custom_credentials
+            .get("myapi")
+            .expect("myapi key");
+        assert!(
+            myapi.allowed_paths.is_empty(),
+            "Explicit empty allowed_paths should be empty vec"
+        );
+    }
+
+    #[test]
+    fn test_custom_credential_allowed_paths_equality() {
+        let cred_a = CustomCredentialDef {
+            upstream: "https://api.example.com".to_string(),
+            credential_key: "key".to_string(),
+            inject_mode: InjectMode::Header,
+            inject_header: "Authorization".to_string(),
+            credential_format: "Bearer {}".to_string(),
+            path_pattern: None,
+            path_replacement: None,
+            query_param_name: None,
+            env_var: None,
+            allowed_paths: vec![PathRule {
+                method: "GET".to_string(),
+                path: "/api/**".to_string(),
+            }],
+        };
+        let cred_b = cred_a.clone();
+        assert_eq!(cred_a, cred_b);
+
+        let mut cred_c = cred_a.clone();
+        cred_c.allowed_paths = Vec::new();
+        assert_ne!(cred_a, cred_c);
+    }
+
+    // ============================================================================
+    // file:// credential key validation tests (continued)
+    // ============================================================================
 
     #[test]
     fn test_validate_custom_credential_file_uri_requires_env_var() {
@@ -3721,6 +3843,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: None,
+            allowed_paths: Vec::new(),
         };
         let result = validate_custom_credential("example", &cred);
         let err = result.expect_err("file:// URI without env_var should be rejected");
@@ -3743,6 +3866,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: Some("EXAMPLE_API_KEY".to_string()),
+            allowed_paths: Vec::new(),
         };
         let result = validate_custom_credential("example", &cred);
         let err = result.expect_err("file:// URI with relative path should be rejected");
@@ -3765,6 +3889,7 @@ mod tests {
             path_replacement: None,
             query_param_name: None,
             env_var: Some("EXAMPLE_API_KEY".to_string()),
+            allowed_paths: Vec::new(),
         };
         let result = validate_custom_credential("example", &cred);
         assert!(
@@ -3809,7 +3934,6 @@ mod tests {
 
     #[test]
     fn test_profile_json_with_file_uri_custom_credential_parses() {
-        // End-to-end: parse a profile JSON with a file:// custom credential
         let dir = tempdir().expect("tmpdir");
         let profile_path = dir.path().join("file-cred.json");
         std::fs::write(
