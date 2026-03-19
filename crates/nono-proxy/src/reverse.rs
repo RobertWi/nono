@@ -313,6 +313,20 @@ async fn handle_oauth2_credential(
         return Ok(());
     }
 
+    // L7 path filter: check method + path against allowed_paths rules
+    if !crate::path_filter::check_path_allowed(&oauth2_route.allowed_paths, method, upstream_path) {
+        warn!("Path denied by L7 filter: {} {}", method, upstream_path);
+        audit::log_denied(
+            ctx.audit_log,
+            audit::ProxyMode::Reverse,
+            service,
+            0,
+            &format!("L7 path denied: {} {}", method, upstream_path),
+        );
+        send_error(stream, 403, "Forbidden").await?;
+        return Ok(());
+    }
+
     let upstream_url = format!(
         "{}{}",
         oauth2_route.upstream.trim_end_matches('/'),

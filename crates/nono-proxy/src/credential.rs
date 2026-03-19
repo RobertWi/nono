@@ -69,6 +69,8 @@ pub struct OAuth2Route {
     pub cache: TokenCache,
     /// Upstream URL (e.g., "https://api.example.com")
     pub upstream: String,
+    /// L7 path filter rules (empty = allow all)
+    pub allowed_paths: Vec<PathRule>,
 }
 
 /// Credential store for all configured routes.
@@ -200,6 +202,7 @@ impl CredentialStore {
                             OAuth2Route {
                                 cache,
                                 upstream: route.upstream.clone(),
+                                allowed_paths: route.allowed_paths.clone(),
                             },
                         );
                     }
@@ -381,6 +384,7 @@ mod tests {
             OAuth2Route {
                 cache,
                 upstream: "https://api.example.com".to_string(),
+                allowed_paths: Vec::new(),
             },
         );
 
@@ -406,6 +410,7 @@ mod tests {
             OAuth2Route {
                 cache,
                 upstream: "https://api.example.com".to_string(),
+                allowed_paths: Vec::new(),
             },
         );
 
