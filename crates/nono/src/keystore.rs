@@ -7,6 +7,7 @@
 //!
 //! Credential references are dispatched by URI scheme:
 //! - `env://VAR_NAME` — reads from the current process environment
+//! - `file:///path/to/secret` — reads from a local file (before sandbox activation)
 //! - `op://vault/item/field` — loaded via the 1Password CLI
 //! - `apple-password://server/account` — loaded via macOS `security`
 //! - Everything else — loaded from the system keyring
@@ -545,7 +546,7 @@ fn load_from_file(uri: &str) -> Result<Zeroizing<String>> {
         )));
     }
 
-    tracing::debug!("Loaded secret from file '{}'", path_str);
+    tracing::debug!("Loaded secret from {}", redact_file_uri(uri));
     Ok(Zeroizing::new(trimmed))
 }
 
@@ -803,6 +804,18 @@ pub fn redact_apple_password_uri(uri: &str) -> String {
         }
     }
     "apple-password://***".to_string()
+}
+
+/// Redact a file:// URI for safe logging.
+/// Keeps the directory structure but replaces the filename.
+/// `file:///run/secrets/api-token` → `file:///run/secrets/[REDACTED]`
+fn redact_file_uri(uri: &str) -> String {
+    if let Some(path) = uri.strip_prefix(FILE_URI_PREFIX) {
+        if let Some(last_slash) = path.rfind('/') {
+            return format!("{}{}[REDACTED]", FILE_URI_PREFIX, &path[..=last_slash]);
+        }
+    }
+    format!("{}[REDACTED]", FILE_URI_PREFIX)
 }
 
 /// Wait for a child process with a timeout.
@@ -1082,6 +1095,7 @@ pub fn build_secret_mappings(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -1500,6 +1514,25 @@ mod tests {
             redact_apple_password_uri("apple-password://only-server"),
             "apple-password://***"
         );
+    }
+
+    // --- redact_file_uri tests ---
+
+    #[test]
+    fn test_redact_file_uri() {
+        assert_eq!(
+            redact_file_uri("file:///run/secrets/api-token"),
+            "file:///run/secrets/[REDACTED]"
+        );
+        assert_eq!(
+            redact_file_uri("file:///etc/ssl/cert.pem"),
+            "file:///etc/ssl/[REDACTED]"
+        );
+    }
+
+    #[test]
+    fn test_redact_file_uri_root_path() {
+        assert_eq!(redact_file_uri("file:///secret"), "file:///[REDACTED]");
     }
 
     // --- classify_op_error tests ---
@@ -2009,7 +2042,7 @@ mod tests {
 
     #[test]
     fn test_validate_file_uri_valid_absolute_path() {
-        assert!(validate_file_uri("file:///vault/secrets/gitlab").is_ok());
+        assert!(validate_file_uri("file:///run/secrets/api-token").is_ok());
         assert!(validate_file_uri("file:///tmp/secret.txt").is_ok());
         assert!(validate_file_uri("file:///etc/ssl/certs/ca.pem").is_ok());
     }
@@ -2029,7 +2062,7 @@ mod tests {
 
     #[test]
     fn test_validate_file_uri_rejects_traversal() {
-        assert!(validate_file_uri("file:///vault/secrets/../../../etc/shadow").is_err());
+        assert!(validate_file_uri("file:///run/secrets/../../../etc/shadow").is_err());
         assert!(validate_file_uri("file:///tmp/../../root/.ssh/id_rsa").is_err());
     }
 
@@ -2042,9 +2075,9 @@ mod tests {
 
     #[test]
     fn test_is_file_uri() {
-        assert!(is_file_uri("file:///vault/secrets/gitlab"));
+        assert!(is_file_uri("file:///run/secrets/api-token"));
         assert!(!is_file_uri("env://MY_VAR"));
-        assert!(!is_file_uri("/vault/secrets/gitlab"));
+        assert!(!is_file_uri("/run/secrets/api-token"));
         // Note: is_file_uri is a scheme detector, not a validator.
         // "file://relative" starts with "file://" so it matches the scheme.
         // Validation (absolute path check) happens in validate_file_uri.
@@ -2119,18 +2152,18 @@ mod tests {
 
     #[test]
     fn test_build_mappings_file_uri_requires_explicit_var() {
-        let result = build_mappings_from_list("file:///vault/secrets/gitlab=GITLAB_TOKEN");
+        let result = build_mappings_from_list("file:///run/secrets/api-token=MY_API_KEY");
         assert!(result.is_ok());
         let mappings = result.unwrap();
         assert_eq!(
-            mappings.get("file:///vault/secrets/gitlab"),
-            Some(&"GITLAB_TOKEN".to_string())
+            mappings.get("file:///run/secrets/api-token"),
+            Some(&"MY_API_KEY".to_string())
         );
     }
 
     #[test]
     fn test_build_mappings_file_uri_without_var_name_is_error() {
-        let result = build_mappings_from_list("file:///vault/secrets/gitlab");
+        let result = build_mappings_from_list("file:///run/secrets/api-token");
         assert!(result.is_err());
     }
 }

@@ -3694,7 +3694,7 @@ mod tests {
     fn test_validate_custom_credential_file_uri_accepted() {
         let cred = CustomCredentialDef {
             upstream: "https://api.example.com".to_string(),
-            credential_key: "file:///vault/secrets/token".to_string(),
+            credential_key: "file:///run/secrets/api-token".to_string(),
             inject_mode: InjectMode::Header,
             inject_header: "Authorization".to_string(),
             credential_format: "Bearer {}".to_string(),
@@ -3713,7 +3713,7 @@ mod tests {
     fn test_validate_custom_credential_file_uri_requires_env_var() {
         let cred = CustomCredentialDef {
             upstream: "https://api.example.com".to_string(),
-            credential_key: "file:///vault/secrets/token".to_string(),
+            credential_key: "file:///run/secrets/api-token".to_string(),
             inject_mode: InjectMode::Header,
             inject_header: "Authorization".to_string(),
             credential_format: "Bearer {}".to_string(),
@@ -3757,7 +3757,7 @@ mod tests {
     fn test_validate_custom_credential_file_uri_traversal_rejected() {
         let cred = CustomCredentialDef {
             upstream: "https://api.example.com".to_string(),
-            credential_key: "file:///vault/secrets/../../../etc/shadow".to_string(),
+            credential_key: "file:///run/secrets/../../../etc/shadow".to_string(),
             inject_mode: InjectMode::Header,
             inject_header: "Authorization".to_string(),
             credential_format: "Bearer {}".to_string(),
@@ -3778,7 +3778,7 @@ mod tests {
         let json_str = r#"{
             "meta": { "name": "test-profile" },
             "env_credentials": {
-                "file:///vault/secrets/api_token": "API_TOKEN"
+                "file:///run/secrets/api-token": "API_TOKEN"
             }
         }"#;
 
@@ -3818,10 +3818,10 @@ mod tests {
                 "meta": { "name": "file-cred-test" },
                 "network": {
                     "custom_credentials": {
-                        "vault_service": {
-                            "upstream": "https://api.vault-service.com",
-                            "credential_key": "file:///vault/secrets/token",
-                            "env_var": "VAULT_API_KEY"
+                        "my_service": {
+                            "upstream": "https://api.example.com",
+                            "credential_key": "file:///run/secrets/api-token",
+                            "env_var": "MY_API_KEY"
                         }
                     }
                 }
@@ -3833,9 +3833,9 @@ mod tests {
         let cred = profile
             .network
             .custom_credentials
-            .get("vault_service")
-            .expect("vault_service credential should exist");
-        assert_eq!(cred.credential_key, "file:///vault/secrets/token");
-        assert_eq!(cred.env_var, Some("VAULT_API_KEY".to_string()));
+            .get("my_service")
+            .expect("my_service credential should exist");
+        assert_eq!(cred.credential_key, "file:///run/secrets/api-token");
+        assert_eq!(cred.env_var, Some("MY_API_KEY".to_string()));
     }
 }
