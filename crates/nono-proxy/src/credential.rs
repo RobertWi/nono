@@ -5,7 +5,7 @@
 //! requests via headers, URL paths, query parameters, or Basic Auth.
 //! The sandboxed agent never sees the real credentials.
 
-use crate::config::{InjectMode, RouteConfig};
+use crate::config::{InjectMode, PathRule, RouteConfig};
 use crate::error::{ProxyError, Result};
 use base64::Engine;
 use std::collections::HashMap;
@@ -36,6 +36,10 @@ pub struct LoadedCredential {
     // --- Query param mode ---
     /// Query parameter name
     pub query_param_name: Option<String>,
+
+    // --- L7 path filtering ---
+    /// Path filter rules for this route. Empty = all paths allowed.
+    pub allowed_paths: Vec<PathRule>,
 }
 
 /// Custom Debug impl that redacts secret values to prevent accidental leakage
@@ -51,6 +55,7 @@ impl std::fmt::Debug for LoadedCredential {
             .field("path_pattern", &self.path_pattern)
             .field("path_replacement", &self.path_replacement)
             .field("query_param_name", &self.query_param_name)
+            .field("allowed_paths", &self.allowed_paths)
             .finish()
     }
 }
@@ -120,6 +125,7 @@ impl CredentialStore {
                         path_pattern: route.path_pattern.clone(),
                         path_replacement: route.path_replacement.clone(),
                         query_param_name: route.query_param_name.clone(),
+                        allowed_paths: route.allowed_paths.clone(),
                     },
                 );
             }
@@ -191,6 +197,7 @@ mod tests {
             path_pattern: None,
             path_replacement: None,
             query_param_name: None,
+            allowed_paths: Vec::new(),
         };
 
         let debug_output = format!("{:?}", cred);

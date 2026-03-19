@@ -87,6 +87,19 @@ pub async fn handle_reverse_proxy(
             prefix: service.clone(),
         })?;
 
+    // L7 path filtering: check method + path against route rules
+    if !crate::path_filter::check_path_allowed(&cred.allowed_paths, &method, &upstream_path) {
+        audit::log_denied(
+            ctx.audit_log,
+            audit::ProxyMode::Reverse,
+            &service,
+            0,
+            &format!("path filter denied: {} {}", method, upstream_path),
+        );
+        send_error(stream, 403, "Forbidden").await?;
+        return Ok(());
+    }
+
     // Validate phantom token based on injection mode.
     // For header/basic_auth modes: validate from Authorization/x-api-key header
     // For url_path mode: validate from URL path pattern
@@ -1127,5 +1140,45 @@ mod tests {
         let path = "/api/data";
         let result = transform_query_param(path, "api_key", &credential).unwrap();
         assert_eq!(result, "/api/data?api_key=key%20with%20spaces");
+    }
+
+    // ============================================================================
+    // L7 Path Filter Integration Tests
+    // ============================================================================
+
+    #[test]
+    fn test_path_filter_blocks_unmatched_method() {
+        use crate::config::PathRule;
+        use crate::path_filter::check_path_allowed;
+
+        let rules = vec![PathRule {
+            method: "GET".into(),
+            path: "/api/v4/projects/*/merge_requests".into(),
+        }];
+
+        assert!(check_path_allowed(
+            &rules,
+            "GET",
+            "/api/v4/projects/123/merge_requests"
+        ));
+        assert!(!check_path_allowed(
+            &rules,
+            "DELETE",
+            "/api/v4/projects/123/merge_requests"
+        ));
+        assert!(!check_path_allowed(
+            &rules,
+            "GET",
+            "/api/v4/projects/123/repository"
+        ));
+    }
+
+    #[test]
+    fn test_path_filter_empty_rules_allow_all() {
+        use crate::path_filter::check_path_allowed;
+
+        assert!(check_path_allowed(&[], "GET", "/anything/at/all"));
+        assert!(check_path_allowed(&[], "POST", "/"));
+        assert!(check_path_allowed(&[], "DELETE", "/admin/nuke"));
     }
 }
