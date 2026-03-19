@@ -3956,14 +3956,14 @@ mod tests {
         let json = r#"{
             "network": {
                 "custom_credentials": {
-                    "gitlab": {
-                        "upstream": "https://gitlab.example.com",
-                        "credential_key": "gitlab_token",
-                        "inject_header": "PRIVATE-TOKEN",
+                    "my-api": {
+                        "upstream": "https://api.example.com",
+                        "credential_key": "my_api_token",
+                        "inject_header": "X-Api-Key",
                         "credential_format": "{}",
                         "allowed_paths": [
-                            {"method": "GET", "path": "/api/v4/projects/*/merge_requests/**"},
-                            {"method": "POST", "path": "/api/v4/projects/*/merge_requests/*/notes"}
+                            {"method": "GET", "path": "/api/v1/resources/**"},
+                            {"method": "POST", "path": "/api/v1/resources/*/comments"}
                         ]
                     }
                 }
@@ -3971,23 +3971,17 @@ mod tests {
         }"#;
 
         let profile: Profile = serde_json::from_str(json).expect("test JSON should parse");
-        let gitlab = profile
+        let my_api = profile
             .network
             .custom_credentials
-            .get("gitlab")
-            .expect("gitlab key");
+            .get("my-api")
+            .expect("my-api key");
 
-        assert_eq!(gitlab.allowed_paths.len(), 2);
-        assert_eq!(gitlab.allowed_paths[0].method, "GET");
-        assert_eq!(
-            gitlab.allowed_paths[0].path,
-            "/api/v4/projects/*/merge_requests/**"
-        );
-        assert_eq!(gitlab.allowed_paths[1].method, "POST");
-        assert_eq!(
-            gitlab.allowed_paths[1].path,
-            "/api/v4/projects/*/merge_requests/*/notes"
-        );
+        assert_eq!(my_api.allowed_paths.len(), 2);
+        assert_eq!(my_api.allowed_paths[0].method, "GET");
+        assert_eq!(my_api.allowed_paths[0].path, "/api/v1/resources/**");
+        assert_eq!(my_api.allowed_paths[1].method, "POST");
+        assert_eq!(my_api.allowed_paths[1].path, "/api/v1/resources/*/comments");
     }
 
     #[test]

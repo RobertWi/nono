@@ -1345,23 +1345,23 @@ mod tests {
 
         let rules = vec![PathRule {
             method: "GET".into(),
-            path: "/api/v4/projects/*/merge_requests".into(),
+            path: "/api/v1/resources/*".into(),
         }];
 
         assert!(check_path_allowed(
             &rules,
             "GET",
-            "/api/v4/projects/123/merge_requests"
+            "/api/v1/resources/123"
         ));
         assert!(!check_path_allowed(
             &rules,
             "DELETE",
-            "/api/v4/projects/123/merge_requests"
+            "/api/v1/resources/123"
         ));
         assert!(!check_path_allowed(
             &rules,
             "GET",
-            "/api/v4/projects/123/repository"
+            "/api/v1/resources/123/details"
         ));
     }
 

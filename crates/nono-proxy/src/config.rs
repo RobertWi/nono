@@ -267,20 +267,20 @@ mod tests {
 
     #[test]
     fn test_path_rule_deserialization() {
-        let json = r#"{"method": "GET", "path": "/api/v4/projects/*/merge_requests/**"}"#;
+        let json = r#"{"method": "GET", "path": "/api/v1/resources/**"}"#;
         let rule: PathRule = serde_json::from_str(json).unwrap();
         assert_eq!(rule.method, "GET");
-        assert_eq!(rule.path, "/api/v4/projects/*/merge_requests/**");
+        assert_eq!(rule.path, "/api/v1/resources/**");
     }
 
     #[test]
     fn test_route_config_with_allowed_paths() {
         let json = r#"{
-            "prefix": "/gitlab",
-            "upstream": "https://gitlab.example.com",
+            "prefix": "/my-api",
+            "upstream": "https://api.example.com",
             "allowed_paths": [
-                {"method": "GET", "path": "/api/v4/projects/*/merge_requests/**"},
-                {"method": "POST", "path": "/api/v4/projects/*/merge_requests/*/notes"}
+                {"method": "GET", "path": "/api/v1/resources/**"},
+                {"method": "POST", "path": "/api/v1/resources/*/comments"}
             ]
         }"#;
         let route: RouteConfig = serde_json::from_str(json).unwrap();

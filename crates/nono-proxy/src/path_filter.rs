@@ -74,33 +74,25 @@ mod tests {
     fn test_matches_exact_path() {
         let rule = PathRule {
             method: "GET".into(),
-            path: "/api/v4/version".into(),
+            path: "/api/v1/health".into(),
         };
-        assert!(matches_path_rule(&rule, "GET", "/api/v4/version"));
-        assert!(!matches_path_rule(&rule, "POST", "/api/v4/version"));
-        assert!(!matches_path_rule(&rule, "GET", "/api/v4/other"));
+        assert!(matches_path_rule(&rule, "GET", "/api/v1/health"));
+        assert!(!matches_path_rule(&rule, "POST", "/api/v1/health"));
+        assert!(!matches_path_rule(&rule, "GET", "/api/v1/other"));
     }
 
     #[test]
     fn test_single_wildcard_matches_one_segment() {
         let rule = PathRule {
             method: "GET".into(),
-            path: "/api/v4/projects/*/merge_requests".into(),
+            path: "/api/v1/resources/*".into(),
         };
-        assert!(matches_path_rule(
-            &rule,
-            "GET",
-            "/api/v4/projects/123/merge_requests"
-        ));
-        assert!(matches_path_rule(
-            &rule,
-            "GET",
-            "/api/v4/projects/my-proj/merge_requests"
-        ));
+        assert!(matches_path_rule(&rule, "GET", "/api/v1/resources/123"));
+        assert!(matches_path_rule(&rule, "GET", "/api/v1/resources/my-item"));
         assert!(!matches_path_rule(
             &rule,
             "GET",
-            "/api/v4/projects/123/456/merge_requests"
+            "/api/v1/resources/123/456/items"
         ));
     }
 
@@ -108,26 +100,26 @@ mod tests {
     fn test_double_wildcard_matches_multiple_segments() {
         let rule = PathRule {
             method: "GET".into(),
-            path: "/api/v4/projects/**".into(),
+            path: "/api/v1/projects/**".into(),
         };
-        assert!(matches_path_rule(&rule, "GET", "/api/v4/projects/123"));
+        assert!(matches_path_rule(&rule, "GET", "/api/v1/projects/123"));
         assert!(matches_path_rule(
             &rule,
             "GET",
-            "/api/v4/projects/123/merge_requests/456"
+            "/api/v1/projects/123/items/456"
         ));
-        assert!(!matches_path_rule(&rule, "GET", "/api/v4/groups/123"));
+        assert!(!matches_path_rule(&rule, "GET", "/api/v1/groups/123"));
     }
 
     #[test]
     fn test_wildcard_method() {
         let rule = PathRule {
             method: "*".into(),
-            path: "/api/v4/version".into(),
+            path: "/api/v1/health".into(),
         };
-        assert!(matches_path_rule(&rule, "GET", "/api/v4/version"));
-        assert!(matches_path_rule(&rule, "POST", "/api/v4/version"));
-        assert!(matches_path_rule(&rule, "DELETE", "/api/v4/version"));
+        assert!(matches_path_rule(&rule, "GET", "/api/v1/health"));
+        assert!(matches_path_rule(&rule, "POST", "/api/v1/health"));
+        assert!(matches_path_rule(&rule, "DELETE", "/api/v1/health"));
     }
 
     #[test]
@@ -148,17 +140,13 @@ mod tests {
     fn test_check_path_allowed_denies_unmatched() {
         let rules = vec![PathRule {
             method: "GET".into(),
-            path: "/api/v4/projects/*/merge_requests".into(),
+            path: "/api/v1/resources/*".into(),
         }];
-        assert!(check_path_allowed(
-            &rules,
-            "GET",
-            "/api/v4/projects/123/merge_requests"
-        ));
+        assert!(check_path_allowed(&rules, "GET", "/api/v1/resources/123"));
         assert!(!check_path_allowed(
             &rules,
             "DELETE",
-            "/api/v4/projects/123"
+            "/api/v1/resources/123"
         ));
     }
 
@@ -166,26 +154,22 @@ mod tests {
     fn test_query_string_stripped_before_matching() {
         let rule = PathRule {
             method: "GET".into(),
-            path: "/api/v4/version".into(),
+            path: "/api/v1/health".into(),
         };
-        assert!(matches_path_rule(
-            &rule,
-            "GET",
-            "/api/v4/version?private_token=xxx"
-        ));
+        assert!(matches_path_rule(&rule, "GET", "/api/v1/health?token=xxx"));
     }
 
     #[test]
     fn test_percent_encoded_path_decoded_before_matching() {
         let rules = vec![PathRule {
             method: "GET".into(),
-            path: "/api/v4/projects/**".into(),
+            path: "/api/v1/projects/**".into(),
         }];
-        // %2F = /, so /api%2Fv4%2Fprojects%2F123 decodes to /api/v4/projects/123
+        // %2F = /, so /api%2Fv1%2Fprojects%2F123 decodes to /api/v1/projects/123
         assert!(check_path_allowed(
             &rules,
             "GET",
-            "/api%2Fv4%2Fprojects%2F123"
+            "/api%2Fv1%2Fprojects%2F123"
         ));
     }
 

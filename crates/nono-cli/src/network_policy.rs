@@ -877,13 +877,13 @@ mod tests {
 
         let mut custom = HashMap::new();
         custom.insert(
-            "gitlab".to_string(),
+            "my-api".to_string(),
             CustomCredentialDef {
-                upstream: "https://gitlab.example.com".to_string(),
-                credential_key: Some("gitlab_token".to_string()),
+                upstream: "https://api.example.com".to_string(),
+                credential_key: Some("my_api_token".to_string()),
                 auth: None,
                 inject_mode: InjectMode::Header,
-                inject_header: "PRIVATE-TOKEN".to_string(),
+                inject_header: "X-Api-Key".to_string(),
                 credential_format: "{}".to_string(),
                 path_pattern: None,
                 path_replacement: None,
@@ -892,24 +892,21 @@ mod tests {
                 allowed_paths: vec![
                     PathRule {
                         method: "GET".to_string(),
-                        path: "/api/v4/projects/*/merge_requests/**".to_string(),
+                        path: "/api/v1/resources/**".to_string(),
                     },
                     PathRule {
                         method: "POST".to_string(),
-                        path: "/api/v4/projects/*/merge_requests/*/notes".to_string(),
+                        path: "/api/v1/resources/*/comments".to_string(),
                     },
                 ],
             },
         );
 
-        let routes = resolve_credentials(&policy, &["gitlab".to_string()], &custom).unwrap();
+        let routes = resolve_credentials(&policy, &["my-api".to_string()], &custom).unwrap();
         assert_eq!(routes.len(), 1);
         assert_eq!(routes[0].allowed_paths.len(), 2);
         assert_eq!(routes[0].allowed_paths[0].method, "GET");
-        assert_eq!(
-            routes[0].allowed_paths[0].path,
-            "/api/v4/projects/*/merge_requests/**"
-        );
+        assert_eq!(routes[0].allowed_paths[0].path, "/api/v1/resources/**");
         assert_eq!(routes[0].allowed_paths[1].method, "POST");
     }
 
