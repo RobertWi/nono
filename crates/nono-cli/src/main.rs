@@ -2037,7 +2037,7 @@ fn prepare_sandbox(args: &SandboxArgs, silent: bool) -> Result<PreparedSandbox> 
         .unwrap_or_default();
     let profile_credentials = loaded_profile
         .as_ref()
-        .map(|p| p.network.credentials.clone())
+        .map(|p| p.network.resolved_credentials().to_vec())
         .unwrap_or_default();
     let profile_custom_credentials = loaded_profile
         .as_ref()
